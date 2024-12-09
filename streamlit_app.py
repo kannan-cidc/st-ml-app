@@ -2,6 +2,7 @@ import streamlit as st
 
 # import pandas to read the our data file
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
 
 st.title("🤖 Machine Learning App")
 
@@ -14,12 +15,12 @@ with st.expander("Data"):
     df
     # define and display
     st.write("**X**")
-    X = df.drop("species", axis=1)
-    X
+    X_raw = df.drop("species", axis=1)
+    X_raw
 
     st.write("**y**")
-    y = df.species
-    y
+    y_raw = df.species
+    y_raw
 
 with st.expander("Data Visualization"):
     st.scatter_chart(
@@ -65,7 +66,7 @@ with st.sidebar:
         max_value=max,
         value=mean,
     )
-    # Filpper Length
+    # Flipper Length
     min, max, mean = (
         df.flipper_length_mm.min().astype(float),
         df.flipper_length_mm.max().astype(float),
@@ -95,7 +96,7 @@ with st.sidebar:
         ("male", "female"),
     )
 
-# Dataframes for Input features
+# DataFrames for Input features
 data = {
     "island": island,
     "bill_length_mm": bill_length_mm,
@@ -105,10 +106,92 @@ data = {
     "sex": gender,
 }
 input_df = pd.DataFrame(data, index=[0])
-input_penguins = pd.concat([input_df, X], axis=0)
+input_penguins = pd.concat([input_df, X_raw], axis=0)
 
 with st.expander("Input Features"):
     st.write("**Input Penguins**")
     input_df
     st.write("**Combined Penguins Data**")
     input_penguins
+
+## Data Preparation
+
+## Encode X
+X_encode = ["island", "sex"]
+df_penguins = pd.get_dummies(input_penguins, prefix=X_encode)
+X = df_penguins[1:]
+input_row = df_penguins[:1]
+
+## Encode Y
+target_mapper = {
+    "Adelie": 0,
+    "Chinstrap": 1,
+    "Gentoo": 2,
+}
+
+
+def target_encoder(val_y: str) -> int:
+    return target_mapper[val_y]
+
+
+y = y_raw.apply(target_encoder)
+
+with st.expander("Data Preparation"):
+    st.write("**Encoded X (input penguins)**")
+    input_row
+    st.write("**Encoded y**")
+    y
+
+
+with st.container():
+    st.subheader("**Prediction Probability**")
+    ## Model Training
+    rf_classifier = RandomForestClassifier()
+    # Fit the model
+    rf_classifier.fit(X, y)
+    # predict using the model
+    prediction = rf_classifier.predict(input_row)
+    prediction_prob = rf_classifier.predict_proba(input_row)
+
+    # reverse the target_mapper
+    p_cols = dict((v, k) for k, v in target_mapper.items())
+    df_prediction_prob = pd.DataFrame(prediction_prob)
+    # set the column names
+    df_prediction_prob.columns = p_cols.values()
+    # set the Penguin name
+    df_prediction_prob.rename(columns=p_cols)
+
+    st.dataframe(
+        df_prediction_prob,
+        column_config={
+            "Adelie": st.column_config.ProgressColumn(
+                "Adelie",
+                help="Adelie",
+                format="%f",
+                width="medium",
+                min_value=0,
+                max_value=1,
+            ),
+            "Chinstrap": st.column_config.ProgressColumn(
+                "Chinstrap",
+                help="Chinstrap",
+                format="%f",
+                width="medium",
+                min_value=0,
+                max_value=1,
+            ),
+            "Gentoo": st.column_config.ProgressColumn(
+                "Gentoo",
+                help="Gentoo",
+                format="%f",
+                width="medium",
+                min_value=0,
+                max_value=1,
+            ),
+        },
+        hide_index=True,
+    )
+
+# display the prediction
+st.subheader("Predicted Species")
+st.success(p_cols[prediction[0]])
